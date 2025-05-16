@@ -3,8 +3,11 @@ package multikeylock
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+var globalTokenId atomic.Int64
 
 type Config struct {
 	Timeout time.Duration
@@ -53,12 +56,11 @@ func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry t
 	ticker := time.NewTicker(retry)
 	defer ticker.Stop()
 
-	// unique pointer for this lock attempt
-	token := new(struct{})
+	tokenId := globalTokenId.Add(1)
 
 	for {
-		if _, loaded := m.locks.LoadOrStore(key, token); !loaded {
-			return &KeyLock{mu: m, key: key, token: token}, true
+		if _, loaded := m.locks.LoadOrStore(key, tokenId); !loaded {
+			return &KeyLock{mu: m, key: key, token: tokenId}, true
 		}
 
 		select {
@@ -73,19 +75,19 @@ func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry t
 type KeyLock struct {
 	mu    *MultiKeyMutex
 	key   string
-	token *struct{}
+	token int64
 }
 
 func (kl *KeyLock) Unlock() {
-	if kl == nil || kl.mu == nil || kl.token == nil {
+	if kl == nil || kl.mu == nil {
 		return
 	}
 
-	// Only delete if the value in the map is *still the same token*.
-	if cur, ok := kl.mu.locks.Load(kl.key); ok && cur == kl.token {
-		kl.mu.locks.Delete(kl.key)
+	if cur, ok := kl.mu.locks.Load(kl.key); ok {
+		if id, ok := cur.(int64); ok && id == kl.token {
+			kl.mu.locks.Delete(kl.key)
+		}
 	}
 
 	kl.mu = nil
-	kl.token = nil
 }
