@@ -12,7 +12,7 @@ type Config struct {
 }
 
 type MultiKeyMutex struct {
-	locks   sync.Map // map[string]struct{} — presence means lock is held
+	locks   sync.Map // map[string]tokenPtr{} — presence means lock is held
 	timeout time.Duration
 	retry   time.Duration
 }
@@ -21,8 +21,6 @@ const (
 	defaultTimeout = 5 * time.Second
 	defaultRetry   = 10 * time.Millisecond
 )
-
-var token = struct{}{}
 
 func New(cfg ...Config) *MultiKeyMutex {
 	c := Config{Timeout: defaultTimeout, Retry: defaultRetry}
@@ -55,9 +53,12 @@ func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry t
 	ticker := time.NewTicker(retry)
 	defer ticker.Stop()
 
+	// unique pointer for this lock attempt
+	token := new(struct{})
+
 	for {
 		if _, loaded := m.locks.LoadOrStore(key, token); !loaded {
-			return &KeyLock{mu: m, key: key, locked: true}, true
+			return &KeyLock{mu: m, key: key, token: token}, true
 		}
 
 		select {
@@ -70,15 +71,21 @@ func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry t
 }
 
 type KeyLock struct {
-	mu     *MultiKeyMutex
-	key    string
-	locked bool
+	mu    *MultiKeyMutex
+	key   string
+	token *struct{}
 }
 
 func (kl *KeyLock) Unlock() {
-	if kl == nil || !kl.locked {
+	if kl == nil || kl.mu == nil || kl.token == nil {
 		return
 	}
-	kl.mu.locks.Delete(kl.key)
-	kl.locked = false
+
+	// Only delete if the value in the map is *still the same token*.
+	if cur, ok := kl.mu.locks.Load(kl.key); ok && cur == kl.token {
+		kl.mu.locks.Delete(kl.key)
+	}
+
+	kl.mu = nil
+	kl.token = nil
 }
