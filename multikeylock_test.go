@@ -131,3 +131,24 @@ func TestConcurrency_MultipleKeys(t *testing.T) {
 		t.Logf("completed in %v with all %d locks acquired", elapsed, successCount.Load())
 	}
 }
+
+func TestUnlock_WithFakeKeyLock_DoesNotDeleteLock(t *testing.T) {
+	m := New()
+
+	lock, ok := m.TryLock("lock")
+	if !ok {
+		t.Fatal("expected to acquire real lock")
+	}
+	defer lock.Unlock()
+
+	forged := &KeyLock{
+		mu:    m,
+		key:   "lock",
+		token: 42,
+	}
+	forged.Unlock()
+
+	if _, ok := m.locks.Load("lock"); !ok {
+		t.Fatal("lock was improperly deleted by forged Unlock()")
+	}
+}
