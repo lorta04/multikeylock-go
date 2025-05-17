@@ -16,6 +16,9 @@ It seems that a well-known, dedicated library for this exact approach does not y
 
 This Go implementation is intended to be accompanied by a **Rust version** of the same component (non-vibe-coded), which will follow a similar locking model but use idiomatic Rust constructs.
 
+👉 Check out the Rust version 
+[here](https://github.com/lorta04/multikeylock-rs).
+
 ## License
 
 MIT
