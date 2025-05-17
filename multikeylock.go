@@ -15,7 +15,7 @@ type Config struct {
 }
 
 type MultiKeyMutex struct {
-	locks   sync.Map // map[string]tokenPtr{} — presence means lock is held
+	locks   sync.Map // map[string]tokenId{} — presence means lock is held
 	timeout time.Duration
 	retry   time.Duration
 }
