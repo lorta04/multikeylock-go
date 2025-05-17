@@ -14,7 +14,7 @@ type Config struct {
 	Retry   time.Duration
 }
 
-type MultiKeyMutex struct {
+type MultiKeyLock struct {
 	locks   sync.Map // map[string]tokenId{} — presence means lock is held
 	timeout time.Duration
 	retry   time.Duration
@@ -25,7 +25,7 @@ const (
 	defaultRetry   = 10 * time.Millisecond
 )
 
-func New(cfg ...Config) *MultiKeyMutex {
+func New(cfg ...Config) *MultiKeyLock {
 	c := Config{Timeout: defaultTimeout, Retry: defaultRetry}
 	if len(cfg) > 0 {
 		if cfg[0].Timeout != 0 {
@@ -35,16 +35,16 @@ func New(cfg ...Config) *MultiKeyMutex {
 			c.Retry = cfg[0].Retry
 		}
 	}
-	return &MultiKeyMutex{timeout: c.Timeout, retry: c.Retry}
+	return &MultiKeyLock{timeout: c.Timeout, retry: c.Retry}
 }
 
-func (m *MultiKeyMutex) TryLock(key string) (*KeyLock, bool) {
+func (m *MultiKeyLock) TryLock(key string) (*KeyLock, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), m.timeout)
 	defer cancel()
 	return m.lockWithContext(ctx, key, m.retry)
 }
 
-func (m *MultiKeyMutex) LockCtx(ctx context.Context, key string, retry time.Duration) (*KeyLock, error) {
+func (m *MultiKeyLock) LockCtx(ctx context.Context, key string, retry time.Duration) (*KeyLock, error) {
 	kl, ok := m.lockWithContext(ctx, key, retry)
 	if !ok {
 		return nil, ctx.Err()
@@ -52,7 +52,7 @@ func (m *MultiKeyMutex) LockCtx(ctx context.Context, key string, retry time.Dura
 	return kl, nil
 }
 
-func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry time.Duration) (*KeyLock, bool) {
+func (m *MultiKeyLock) lockWithContext(ctx context.Context, key string, retry time.Duration) (*KeyLock, bool) {
 	ticker := time.NewTicker(retry)
 	defer ticker.Stop()
 
@@ -73,7 +73,7 @@ func (m *MultiKeyMutex) lockWithContext(ctx context.Context, key string, retry t
 }
 
 type KeyLock struct {
-	mu    *MultiKeyMutex
+	mu    *MultiKeyLock
 	key   string
 	token int64
 }
